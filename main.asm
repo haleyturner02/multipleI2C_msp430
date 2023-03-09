@@ -87,7 +87,10 @@ init:
 
 main:
 
-	call	#LCDstart
+	bic.w	#CCIE, &TB0CCTL0			; Disable flag for 30ms delay
+	call	#Delay30					; Delay ~30ms on startup
+	mov.w	#3, R5						; Move 3 into R5 for LCDsetup counter
+	call	#LCDsetup					; Setup LCD display
 
 WaitForNewValue:
 
@@ -105,20 +108,6 @@ WaitForNewValue:
 	mov.w	#0, R8
 
 	jmp		WaitForNewValue
-
-;-------------------------------------------------------------------------------
-; Subroutine: LCDstart
-;-------------------------------------------------------------------------------
-
-LCDstart:
-
-	bic.w	#CCIE, &TB0CCTL0			; Disable flag for 30ms delay
-	call	#Delay30					; Delay ~30ms on startup
-	mov.w	#3, R5						; Move 3 into R5 for LCDsetup counter
-	call	#LCDsetup					; Setup LCD display
-
-	ret
-
 
 ;-------------------------------------------------------------------------------
 ; Subroutine: LCDSetup
