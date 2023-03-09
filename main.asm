@@ -3,6 +3,8 @@
 ;
 ; Haley Turner, Zachary Becker, EELE 465, Project 04
 ;
+; I2C Master
+;
 ; This project uses I2C communication with the MSP430FR2355 as the master and
 ; two MSP430FR2310 devices as slaves. Both slaves receive data from the master for the
 ; keypad input and use it to control different outputs. One 2310 controls the LED bar
