@@ -9,11 +9,6 @@
 ; to display patterns when A, B, C, or D on the keypad are pressed. The other 2310
 ; controls an LCD screen to display which character on the keypad was pressed.
 ;
-; R5 - Register for LCDsetup counter
-; R6 - Register for 30ms delay
-; R7 - Register for storing upper nibble of ASCII character
-; R8 - Register for storing lower nibble of ASCII character & resulting ASCII character byte
-;
 ;-------------------------------------------------------------------------------
             .cdecls C,LIST,"msp430.h"       ; Include device header file
             
@@ -38,239 +33,310 @@ StopWDT     mov.w   #WDTPW|WDTHOLD,&WDTCTL  ; Stop watchdog timer
 
 init:
 
-	bis.b	#BIT6, &P6DIR					; Use LED2 as indicator
-	bic.b	#BIT6, &P6OUT					; Start LED2 off
+	bis.b	#BIT0, &P1DIR					; Init LED1 as output
+	bic.b	#BIT0, &P1OUT					; Start LED1 off
 
-	bis.b	#BIT4, &P1OUT					; Output pin for DB4
-	bic.b	#BIT4, &P1OUT
 
-	bis.b	#BIT5, &P1DIR					; Output pin for DB5
-	bic.b	#BIT5, &P1OUT
-
-	bis.b	#BIT6, &P1DIR					; Output pin for DB6
-	bic.b	#BIT6, &P1OUT
-
-	bis.b	#BIT7, &P1DIR					; Output pin for DB7
-	bic.b	#BIT7, &P1OUT
-											; (R/W = 0 write, tie pin 5 on LCD to ground)
-
-	bis.b	#BIT1, &P1DIR					; Output pin for RS
-	bic.b	#BIT1, &P1OUT					; (RS = 0 instruction, RS = 1 data)
-
-	bis.b	#BIT0, &P1DIR					; Output pin for E, data starts on falling edge
-	bic.b	#BIT0, &P1OUT
-
-	; Need initialization for I2C Slave
-
-	mov.w	#0, R5
-	mov.w	#0, R6
-	mov.w	#0, R7
-	mov.w	#0, R8
+	mov.w	#0, R4							; Clear register data for column
+	mov.w	#0, R5							; Clear register data for row
+	mov.w	#0, R6							; Clear register data for keypad input
 
 	bic.b	#LOCKLPM5, &PM5CTL0				; Disable GPIO power-on default high_Z mode
 
-	; Setup Timer B0
-	bis.w #TBCLR, &TB0CTL 					; Clear timer
-	bis.w #TBSSEL__SMCLK, &TB0CTL 			; Choose SMCLK as source
-	bis.w #ID__4, &TB0CTL 					; Divide by 4
-	bis.w #TBIDEX_7, &TB0EX0				; Divide by 8
-	bis.w #MC__UP, &TB0CTL					; Set timer to UP mode
-
-	; Setup Timer Compare
-	mov.w #14000, &TB0CCR0					; Set compare value (SMCLK spec. @ 1 MHz)
-
-	bic.w #CCIFG, &TB0CCTL0					; Clear CCIFG flag
-	eint 									; Global enable
-
-
 main:
 
-	call	#LCDstart
+	mov.w	#0777h, R8					; Initialize outer delay loop counter (small delay for button response time)
+	call	#Delay
 
-WaitForNewValue:
+	call 	#ColumnInput				; Change columns to be inputs, rows to be outputs
+	call	#CheckKeypad
 
-	; Need I2C Receive to put Keypad input value into a register
-	; Move upper nibble into R7, lower nibble into R8
+	cmp.b	#0087h, R4					; Check if '1' was pressed
+	;jz		Transmit1					; LCD Data for 1: 0011 0001
+										; LED Data for 1: 0087h
 
-	cmp.w	#0, R7						; Check if new value has been received from master (no keypad value has upper nibble == 0000)
-	jz		WaitForNewValue
+	cmp.b	#0083h, R4					; Check if '2' was pressed
+	;jz		Transmit2					; LCD Data for 2: 0011 0010
+										; LED Data for 2: 0083h
 
-	call	#LCDdisplay					; Call subroutine to display received character
+	cmp.b	#0081h, R4					; Check if '3' was pressed
+	;jz		Transmit3					; LCD Data for 3: 0011 0011
+										; LED Data for 3: 0081h
 
-	mov.w	#0, R5
-	mov.w	#0, R6
-	mov.w	#0, R7
-	mov.w	#0, R8
+	cmp.b	#0080h, R4					; Check if 'A' was pressed
+	;jz		TransmitA					; LCD Data for A: 0100 0001
+										; LED Data for A: 0080h
 
-	jmp		WaitForNewValue
+	cmp.b	#0047h, R4					; Check if '4' was pressed
+	;jz		Transmit4					; LCD Data for 4: 0011 0100
+										; LED Data for 4: 0047h
+
+	cmp.b	#0043h, R4					; Check if '5' was pressed
+	;jz		Transmit5					; LCD Data for 5: 0011 0101
+										; LED Data for 5: 0043h
+
+	cmp.b	#0041h, R4					; Check if '6' was pressed
+	;jz		Transmit6					; LCD Data for 6: 0011 0110
+										; LED Data for 6: 0041h
+
+	cmp.b	#0040h, R4					; Check if 'B' was pressed
+	;jz		TransmitB					; LCD Data for B: 0100 0010
+										; LED Data for B: 0040h
+
+	cmp.b	#0027h, R4					; Check if '7' was pressed
+	;jz		Transmit7					; LCD Data for 7: 0011 0111
+										; LED Data for 7: 0027h
+
+	cmp.b	#0023h, R4					; Check if '8' was pressed
+	;jz		Transmit8					; LCD Data for 8: 0011 1000
+										; LED Data for 8: 0023h
+
+	cmp.b	#0021h, R4					; Check if '9' was pressed
+	;jz		Transmit9					; LCD Data for 9: 0011 1001
+										; LED Data for 9: 0021h
+
+	cmp.b	#0020h, R4					; Check if 'C' was pressed
+	;jz		TransmitC					; LCD Data for C: 0100 0011
+										; LED Data for C: 0020h
+
+	cmp.b	#0017h, R4					; Check if '*' was pressed
+	;jz		Transmit*					; LCD Data for *: 0010 1010
+										; LED Data for *: 0017h
+
+	cmp.b	#0013h, R4					; Check if '0' was pressed
+	;jz		Transmit0					; LCD Data for 0: 0011 0000
+										; LED Data for 0: 0013h
+
+	cmp.b	#0011h, R4					; Check if '#' was pressed
+	;jz		Transmit#					; LCD Data for #: 0010 0011
+										; LED Data for #: 0011h
+
+	cmp.b	#0010h, R4					; Check if 'D' was pressed
+	;jz		TransmitD					; LCD Data for D: 0100 0100
+										; LED Data for D: 0010h
+
+	mov.w	#0, R4						; Clear register data for column
+	mov.w	#0, R5						; Clear register data for row
+
+	jmp		main
 
 ;-------------------------------------------------------------------------------
-; Subroutine: LCDstart
+; Subroutine: CheckKeypad
 ;-------------------------------------------------------------------------------
 
-LCDstart:
+CheckKeypad:
 
-	bic.w	#CCIE, &TB0CCTL0			; Disable flag for 30ms delay
-	call	#Delay30					; Delay ~30ms on startup
-	mov.w	#3, R5						; Move 3 into R5 for LCDsetup counter
-	call	#LCDsetup					; Setup LCD display
+	mov.b	&P3IN, R6					; Move keypad input byte from Port 3 to R6
+	call	#CheckColumn				; Call subroutine to check which column was pressed
+
+	call	#RowInput					; Change rows to be inputs, columns to be outputs
+
+	mov.b	&P3IN, R6					; Move keypad input byte from Port 3 to R6
+	call	#CheckRow					; Call subroutine to check which row was pressed
+
+	call	#ColumnInput				; Change columns back to inputs, rows to be outputs
+
+	add.b	R5, R4						; Concatenate column and row bits and put into R4
+
+	ret
+
+;-------------------------- END CheckKeypad ------------------------------------
+
+;-------------------------------------------------------------------------------
+; Subroutine: CheckColumn
+;-------------------------------------------------------------------------------
+
+CheckColumn:
+
+	bit.b	#BIT0, R6					; Test if bit 0 is set (column 4)
+	jnz		Column4
+
+	bit.b	#BIT1, R6					; Test if bit 1 is set (column 3)
+	jnz		Column3
+
+	bit.b	#BIT2, R6					; Test if bit 2 is set (column 2)
+	jnz		Column2
+
+	bit.b	#BIT3, R6					; Test if bit 3 is set (column 3)
+	jnz		Column1
+
+	cmp.b	#0, R6
+	jz		NoColumn
 
 	ret
 
 
+Column1:
+
+	mov.w	#00F8h, R4					; Move F8h into R4 if column 1 pressed
+	ret
+
+Column2:
+
+	mov.w	#00F4h, R4					; Move F4h into R4 if column 2 pressed
+	ret
+
+Column3:
+
+	mov.w	#00F2h, R4					; Move F2h into R4 if column 3 pressed
+	ret
+
+Column4:
+
+	mov.w	#00F1h, R4					; Move F1h into R4 if column 4 pressed
+	ret
+
+NoColumn:
+
+	mov.w	#0, R4						; Clear register data for column
+	ret
+
+;-------------------------- END CheckColumn ------------------------------------
+
 ;-------------------------------------------------------------------------------
-; Subroutine: LCDSetup
+; Subroutine: CheckRow
 ;-------------------------------------------------------------------------------
 
-LCDsetup:
+CheckRow:
 
-	call	#Configure
-	call	#Latch
-	call	#Delay30
-	dec.b	R5
-	jnz		LCDsetup
+	bit.b	#BIT4, R6					; Test if bit 4 is set (row 4)
+	jnz		Row4
 
-	call	#Configure2
-	call	#Latch
-	call	#Delay30
+	bit.b	#BIT5, R6					; Test if bit 5 is set (row 3)
+	jnz		Row3
+
+	bit.b	#BIT6, R6					; Test if bit 6 is set (row 2)
+	jnz		Row2
+
+	bit.b	#BIT7, R6					; Test if bit 7 is set (row 1)
+	jnz		Row1
+
+	cmp.b	#0, R6
+	jz		NoRow
 
 	ret
 
-;-------------------------- END LCDSetup ---------------------------------------
+Row1:
+
+	mov.w	#008Fh, R5					; Move 8Fh into R5 if row 1 pressed
+	ret
+
+Row2:
+
+	mov.w	#004Fh, R5					; Move 4Fh into R5 if row 2 pressed
+	ret
+
+Row3:
+
+	mov.w	#002Fh, R5					; Move 2Fh into R5 if row 3 pressed
+	ret
+
+Row4:
+
+	mov.w	#001Fh, R5					; Move 1Fh into R5 if row 4 pressed
+	ret
+
+NoRow:
+
+	mov.w	#0, R5						; Clear register data for row
+	ret
+
+;-------------------------- END CheckRow ---------------------------------------
 
 ;-------------------------------------------------------------------------------
-; Subroutine: Delay30
+; Subroutine: RowInput
 ;-------------------------------------------------------------------------------
 
-Delay30:								; Timer ~ 30ms (temporary compare value for testing)
+RowInput:
 
-	bis.w 	#CCIE, &TB0CCTL0			; Enable local enable for CCRO in TB0
-	cmp.b	#0, R6						; Check R6 to determine if 30ms has passed
-	jz		Delay30						; Continue waiting until R6 is no longer 0
+	bic.b 	#BIT4, &P3DIR					; Initialize P3.4 as input
+	bis.b	#BIT4, &P3REN					; Enable pull up/down resistor for P3.4
+	bic.b	#BIT4, &P3OUT					; Configure resistor as pull down
 
-	bic.w 	#CCIE, &TB0CCTL0			; Disable local enable for CCRO in TB0
-	mov.w	#0, R6						; Reset R6 value for next time delay is needed
+	bic.b	#BIT5, &P3DIR					; Intialize P3.5 as input
+	bis.b	#BIT5, &P3REN					; Enable pull up/down resistor for P3.5
+	bic.b	#BIT5, &P3OUT					; Configure resistor as pull down
+
+	bic.b	#BIT6, &P3DIR					; Initialize P3.6 as input
+	bis.b	#BIT6, &P3REN					; Enable pull up/down resistor for P3.6
+	bic.b	#BIT6, &P3OUT					; Configure resistor as pull down
+
+	bic.b	#BIT7, &P3DIR					; Initialize P3.7 as input
+	bis.b	#BIT7, &P3REN					; Enable pull up/down resistor for P3.7
+	bic.b	#BIT7, &P3OUT					; Configure resistor as pull down
+
+	bis.b	#BIT0, &P3DIR					; Initialize P3.0 as output
+	bis.b	#BIT0, &P3OUT					; Set P3.0 to be on
+
+	bis.b	#BIT1, &P3DIR					; Initialize P3.1 as output
+	bis.b	#BIT1, &P3OUT					; Set P3.1 to be on
+
+	bis.b	#BIT2, &P3DIR					; Initialize P3.2 as output
+	bis.b	#BIT2, &P3OUT					; Set P3.2 to be on
+
+	bis.b	#BIT3, &P3DIR					; Initialize P3.3 as output
+	bis.b	#BIT3, &P3OUT					; Set P3.3 to be on
 
 	ret
 
-;-------------------------- END Delay30 ----------------------------------------
+;-------------------------- END RowInput ---------------------------------------
 
 ;-------------------------------------------------------------------------------
-; Subroutine: Configure
+; Subroutine: ColumnInput
 ;-------------------------------------------------------------------------------
 
-Configure:
+ColumnInput:
 
-	bic.b	#BIT1, &P1OUT					; Clear RS bit
-	bis.b	#BIT4, &P1OUT					; Set P1.4 & P1.5
-	bis.b	#BIT5, &P1OUT
-	bic.b	#BIT6, &P1OUT					; Clear P1.6 & P1.7
-	bic.b	#BIT7, &P1OUT
+	bic.b 	#BIT0, &P3DIR					; Initialize P3.0 as input
+	bis.b	#BIT0, &P3REN					; Enable pull up/down resistor for P3.0
+	bic.b	#BIT0, &P3OUT					; Configure resistor as pull down
+
+	bic.b	#BIT1, &P3DIR					; Intialize P3.1 as input
+	bis.b	#BIT1, &P3REN					; Enable pull up/down resistor for P3.1
+	bic.b	#BIT1, &P3OUT					; Configure resistor as pull down
+
+	bic.b	#BIT2, &P3DIR					; Initialize P3.2 as input
+	bis.b	#BIT2, &P3REN					; Enable pull up/down resistor for P3.2
+	bic.b	#BIT2, &P3OUT					; Configure resistor as pull down
+
+	bic.b	#BIT3, &P3DIR					; Initialize P3.3 as input
+	bis.b	#BIT3, &P3REN					; Enable pull up/down resistor for P3.3
+	bic.b	#BIT3, &P3OUT					; Configure resistor as pull down
+
+	bis.b	#BIT4, &P3DIR					; Initialize P3.4 as output
+	bis.b	#BIT4, &P3OUT					; Set P3.4 to be on
+
+	bis.b	#BIT5, &P3DIR					; Initialize P3.5 as output
+	bis.b	#BIT5, &P3OUT					; Set P3.5 to be on
+
+	bis.b	#BIT6, &P3DIR					; Initialize P3.6 as output
+	bis.b	#BIT6, &P3OUT					; Set P3.6 to be on
+
+	bis.b	#BIT7, &P3DIR					; Initialize P3.7 as output
+	bis.b	#BIT7, &P3OUT					; Set P3.7 to be on
 
 	ret
 
-;-------------------------- END Configure --------------------------------------
+;-------------------------- END ColumnInput ------------------------------------
 
 ;-------------------------------------------------------------------------------
-; Subroutine: Latch
+; Subroutine: Delay
 ;-------------------------------------------------------------------------------
 
-Latch:
+Delay:
 
-	bis.b	#BIT0, &P1OUT					; Set E bit
-	mov.w	#1000, R6						; Put 1000 into R6 for 1000 cycle delay
+	mov.w	#50, R7
 
-Delay1000:
+InnerDelay:
 
-	dec.w	R6
-	cmp.w	#0, R6
-	jnz		Delay1000
-
-	bic.b	#BIT0, &P1OUT					; Clear E bit
+	dec.w	R7
+	jnz		InnerDelay
+	dec.w	R8
+	jnz		Delay
 
 	ret
 
-;-------------------------- END Latch ------------------------------------------
-
-;-------------------------------------------------------------------------------
-; Subroutine: Configure2
-;-------------------------------------------------------------------------------
-
-Configure2:
-
-	bic.b	#BIT1, &P1OUT					; Clear RS bit
-	bic.b	#BIT4, &P1OUT					; Set P1.5
-	bis.b	#BIT5, &P1OUT					; Clear P1.4, P1.6 & P1.7
-	bic.b	#BIT6, &P1OUT
-	bic.b	#BIT7, &P1OUT
-
-	ret
-
-;-------------------------- END Configure2 -------------------------------------
-
-;-------------------------------------------------------------------------------
-; Subroutine: LCDdisplay
-;-------------------------------------------------------------------------------
-
-LCDdisplay:
-
-	bis.b	#BIT1, &P1OUT					; Set RS bit
-
-	call	#UpperNibble					; Set upper nibble for column of ASCII chart
-	call	#Latch
-	call	#Delay30
-	call	#LowerNibble					; Set lower nibble for row of ASCII chart
-	call	#Latch
-	call	#Delay30
-
-	add.b	R7, R8							; Combine upper and lower nibble and put into R8
-
-
-	ret
-
-;-------------------------- END LCDdisplay -------------------------------------
-
-;-------------------------------------------------------------------------------
-; Subroutine: UpperNibble
-;-------------------------------------------------------------------------------
-
-UpperNibble:
-
-	; Set upper nibble of value
-	;mov.b	#R4, R7				; Move data received from master into R7
-	rla.b	R7
-	rla.b	R7
-	rla.b	R7
-	rla.b	R7
-
-	ret
-
-;-------------------------- END UpperNibble ------------------------------------
-
-;-------------------------------------------------------------------------------
-; Subroutine: LowerNibble
-;-------------------------------------------------------------------------------
-
-LowerNibble:
-
-	; Set lower nibble of value
-	mov.b	#0011b, R8				; Temporary value, replace with data received
-
-	ret
-
-;-------------------------- END LowerNibble ------------------------------------
-
-;-------------------------------------------------------------------------------
-; Interrupt Service Routine for TB0 CCR0
-;-------------------------------------------------------------------------------
-
-ISR_TB0_CCR0:
-
-	mov.b	#1, R6								; Move 1 into R6 to indicate 30ms has passed
-	bic.w 	#CCIFG, &TB0CCTL0					; Clear CCIFG flag
-	reti
-
-;-------------------------- END ISR --------------------------------------------
+;-------------------------- END Delay ------------------------------------------
 
 ;-------------------------------------------------------------------------------
 ; Stack Pointer definition
@@ -284,5 +350,3 @@ ISR_TB0_CCR0:
             .sect   ".reset"                ; MSP430 RESET Vector
             .short  RESET
             
-            .sect ".int43"					; TB0 CCR0 Vector
-			.short ISR_TB0_CCR0
